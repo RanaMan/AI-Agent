@@ -3,7 +3,11 @@ package org.example;
 // Import the AnthropicChatModel class from LangChain4j
 // This class is responsible for connecting to and communicating with Anthropic's Claude AI API
 // LangChain4j is a Java framework that simplifies working with Large Language Models (LLMs)
+import com.sun.net.httpserver.HttpServer;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
+
+import java.net.InetSocketAddress;
+import java.util.Date;
 
 /**
  * Main class - This is the entry point of the application.
@@ -90,5 +94,24 @@ public class Main {
         // 3. Have a follow-up conversation about monitoring tools
         // All output will be printed to the console
         agentDemo.demonstrateAgent();
+
+// After the agent demonstration, add:
+        System.out.println("Starting web server on port 5000...");
+
+// Simple HTTP server
+        try {
+            HttpServer server = HttpServer.create(new InetSocketAddress(5000), 0);
+            server.createContext("/", exchange -> {
+                String response = "AI Agent is running! Last analysis: " + new Date();
+                exchange.sendResponseHeaders(200, response.length());
+                exchange.getResponseBody().write(response.getBytes());
+                exchange.close();
+            });
+            server.start();
+            System.out.println("Server started on port 5000");
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+
     }
 }
