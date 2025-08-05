@@ -47,7 +47,7 @@ public class PdfProcessorService {
         
         long startTime = System.currentTimeMillis();
         
-        try (PDDocument document = Loader.loadPDF(file.getInputStream())) {
+        try (PDDocument document = Loader.loadPDF(file.getBytes())) {
             
             // Check if PDF is password protected
             if (document.isEncrypted()) {
