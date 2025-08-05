@@ -97,4 +97,31 @@ public interface TechnicalConsultantAgent {
      * @return The AI's response as a String
      */
     String chat(String userMessage);  // Remove the @UserMessage annotation entirely
+
+    /**
+     * recapDocument method - Generates a structured recap/summary of document text
+     * 
+     * This method is specifically designed for comprehensive document analysis and summarization.
+     * It uses an enhanced system message to configure the AI as a professional document analyst
+     * who provides structured, well-organized recaps with consistent formatting.
+     * 
+     * @SystemMessage annotation:
+     * - Configures the AI's role as a professional document analyst
+     * - Instructs the AI to provide structured content with:
+     *   1) Brief executive summary (2-3 sentences)
+     *   2) Key points in bullet format
+     *   3) Main topics covered
+     *   4) Conclusion
+     * - Ensures consistent, comprehensive yet concise responses
+     * 
+     * @UserMessage annotation:
+     * - Uses a template that asks the AI to recap the provided document text
+     * - {{documentText}} placeholder gets replaced with the actual document content
+     * 
+     * @param documentText The extracted text from a document (PDF, etc.)
+     * @return A structured recap/summary with executive summary, key points, topics, and conclusion
+     */
+    @SystemMessage("You are a professional document analyst. When recapping documents, provide: 1) A brief executive summary (2-3 sentences), 2) Key points (bullet format), 3) Main topics covered, and 4) A conclusion. Be concise but comprehensive.")
+    @UserMessage("Recap this document please: {{documentText}}")
+    String recapDocument(@V("documentText") String documentText);
 }
