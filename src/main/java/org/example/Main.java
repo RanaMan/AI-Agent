@@ -76,7 +76,7 @@ public class Main {
         
         // Print a header to indicate we're starting the agent test
         // The \n creates a newline for better formatting in the console output
-        System.out.println("\n=== Testing Agent ===");
+        System.out.println("\n=== Testing Agent - Via my Application Pipeline===");
         
         // Create an instance of AgentExample, passing in our configured Claude model
         // This creates our AI agent with all the capabilities defined in AgentExample class
