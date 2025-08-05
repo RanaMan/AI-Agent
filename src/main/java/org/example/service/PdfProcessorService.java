@@ -1,5 +1,6 @@
 package org.example.service;
 
+import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
@@ -46,7 +47,7 @@ public class PdfProcessorService {
         
         long startTime = System.currentTimeMillis();
         
-        try (PDDocument document = PDDocument.load(file.getInputStream())) {
+        try (PDDocument document = Loader.loadPDF(file.getInputStream())) {
             
             // Check if PDF is password protected
             if (document.isEncrypted()) {
