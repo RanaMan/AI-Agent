@@ -1,0 +1,96 @@
+name: Deploy to AWS Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  EB_APPLICATION_NAME: langchain4j-ai-agent
+  EB_ENVIRONMENT_NAME: langchain4j-ai-agent-env
+  DEPLOYMENT_PACKAGE: target/ai-agent-${{ github.sha }}.jar
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build with Maven
+        run: |
+          mvn clean package -DskipTests
+          mv target/AI_Agent-1.0-SNAPSHOT.jar ${{ env.DEPLOYMENT_PACKAGE }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload JAR to S3
+        run: |
+          BUCKET_NAME=elasticbeanstalk-${{ env.AWS_REGION }}-${{ secrets.AWS_ACCOUNT_ID }}
+          aws s3 cp ${{ env.DEPLOYMENT_PACKAGE }} s3://${BUCKET_NAME}/deployments/ai-agent-${{ github.sha }}.jar
+
+      - name: Create Elastic Beanstalk Application Version
+        run: |
+          BUCKET_NAME=elasticbeanstalk-${{ env.AWS_REGION }}-${{ secrets.AWS_ACCOUNT_ID }}
+          aws elasticbeanstalk create-application-version \
+            --application-name ${{ env.EB_APPLICATION_NAME }} \
+            --version-label ${{ github.sha }} \
+            --source-bundle S3Bucket="${BUCKET_NAME}",S3Key="deployments/ai-agent-${{ github.sha }}.jar" \
+            --description "Deployment from GitHub Actions - Commit ${{ github.sha }}"
+
+      - name: Deploy to Elastic Beanstalk
+        run: |
+          aws elasticbeanstalk update-environment \
+            --application-name ${{ env.EB_APPLICATION_NAME }} \
+            --environment-name ${{ env.EB_ENVIRONMENT_NAME }} \
+            --version-label ${{ github.sha }}
+
+      - name: Wait for deployment to complete
+        run: |
+          echo "Waiting for deployment to complete..."
+          aws elasticbeanstalk wait environment-updated \
+            --application-name ${{ env.EB_APPLICATION_NAME }} \
+            --environment-name ${{ env.EB_ENVIRONMENT_NAME }} \
+            --version-label ${{ github.sha }}
+          
+          # Get environment status
+          STATUS=$(aws elasticbeanstalk describe-environments \
+            --application-name ${{ env.EB_APPLICATION_NAME }} \
+            --environment-names ${{ env.EB_ENVIRONMENT_NAME }} \
+            --query "Environments[0].Status" \
+            --output text)
+          
+          echo "Deployment completed with status: $STATUS"
+          
+          if [ "$STATUS" != "Ready" ]; then
+            echo "Deployment may have issues. Check AWS Elastic Beanstalk console."
+            exit 1
+          fi
+
+      - name: Get Environment URL
+        run: |
+          URL=$(aws elasticbeanstalk describe-environments \
+            --application-name ${{ env.EB_APPLICATION_NAME }} \
+            --environment-names ${{ env.EB_ENVIRONMENT_NAME }} \
+            --query "Environments[0].CNAME" \
+            --output text)
+          echo "Application deployed to: http://$URL"
