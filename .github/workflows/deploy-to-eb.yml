@@ -10,7 +10,7 @@ env:
   AWS_REGION: us-east-1
   EB_APPLICATION_NAME: langchain4j-ai-agent
   EB_ENVIRONMENT_NAME: langchain4j-ai-agent-env
-  DEPLOYMENT_PACKAGE: target/ai-agent-${{ github.sha }}.jar
+  DEPLOYMENT_PACKAGE: target/application.jar
 
 permissions:
   id-token: write
@@ -34,7 +34,7 @@ jobs:
       - name: Build with Maven
         run: |
           mvn clean package -DskipTests
-          mv target/AI_Agent-1.0-SNAPSHOT.jar ${{ env.DEPLOYMENT_PACKAGE }}
+          ls -la target/
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
