@@ -12,10 +12,20 @@ import dev.langchain4j.model.anthropic.AnthropicChatModel;
 // It acts as a factory that builds AI agents based on interfaces we define
 import dev.langchain4j.service.AiServices;
 
+// Spring imports for dependency injection and lifecycle management
+import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.annotation.PostConstruct;
+
 /**
  * AgentExample class demonstrates how to use LangChain4j to create and interact with an AI agent.
  * This class acts as a wrapper around the TechnicalConsultantAgent interface,
  * providing concrete examples of how to use the AI agent for various tasks.
+ * 
+ * @Service annotation marks this class as a Spring service component, which means:
+ * - Spring will automatically create an instance of this class
+ * - It can be injected into other Spring components
+ * - It's a singleton by default
  * 
  * The main purpose is to show how to:
  * 1. Build an AI agent with memory capabilities
@@ -23,33 +33,47 @@ import dev.langchain4j.service.AiServices;
  * 3. Use the agent for code review
  * 4. Have follow-up conversations with context
  */
+@Service
 public class AgentExample {
     // This field holds our AI agent instance that will handle all AI interactions
-    // It's marked as 'final' because once we create the agent, we don't want to change it
+    // It's not final anymore because we'll initialize it in @PostConstruct
     // The agent is of type TechnicalConsultantAgent, which is our custom interface
-    private final TechnicalConsultantAgent agent;
+    private TechnicalConsultantAgent agent;
+    
+    // The Claude model will be injected by Spring
+    private final AnthropicChatModel claude;
 
     /**
-     * Constructor that initializes the AI agent with specific configurations.
+     * Constructor that uses Spring's dependency injection.
+     * 
+     * @Autowired tells Spring to automatically inject the AnthropicChatModel bean
+     * that we defined in Main.java
      * 
      * @param claude - The AnthropicChatModel instance that connects to Claude AI
-     *                 This is passed in from Main.java and contains API keys and model settings
+     *                 This is automatically injected by Spring from the @Bean in Main.java
      */
+    @Autowired
     public AgentExample(AnthropicChatModel claude) {
-        // Here we're building our AI agent using the AiServices builder pattern
-        // This is a common design pattern that allows us to configure complex objects step by step
+        this.claude = claude;
+    }
+    
+    /**
+     * Initialize the agent after Spring has completed dependency injection.
+     * 
+     * @PostConstruct ensures this method runs after the bean is fully constructed
+     * but before it's put into service. This is where we build our AI agent.
+     */
+    @PostConstruct
+    public void init() {
+        // Build our AI agent using the AiServices builder pattern
         this.agent = AiServices.builder(TechnicalConsultantAgent.class)
-                // .chatModel() sets which AI model to use (in this case, Claude from Anthropic)
-                // This connects our agent to the actual AI service that will generate responses
                 .chatModel(claude)
-                // .chatMemory() adds memory capabilities to our agent
-                // MessageWindowChatMemory.withMaxMessages(20) means the agent will remember
-                // the last 20 messages in the conversation (both user messages and AI responses)
-                // This allows for context-aware conversations where the AI remembers what was discussed
                 .chatMemory(MessageWindowChatMemory.withMaxMessages(20))
-                // .build() finalizes the configuration and creates the actual agent instance
-                // This returns an implementation of TechnicalConsultantAgent that LangChain4j generates
                 .build();
+        
+        // Run the demonstration automatically when the application starts
+        System.out.println("\n=== Spring Boot Application Started ===");
+        demonstrateAgent();
     }
 
     /**
