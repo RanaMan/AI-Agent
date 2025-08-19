@@ -54,18 +54,6 @@ public class EmailService {
     @Value("${aws.ses.sender.name:AI Agent System}")
     private String senderName;
     
-    @Value("${spring.mail.host}")
-    private String smtpHost;
-    
-    @Value("${spring.mail.port}")
-    private String smtpPort;
-    
-    @Value("${spring.mail.username}")
-    private String awsAccessKeyId;
-    
-    @Value("${spring.mail.password}")
-    private String awsSecretKey;
-    
     @Value("${aws.region:us-east-1}")
     private String awsRegion;
     
@@ -78,60 +66,29 @@ public class EmailService {
         logger.info("========================================");
         logger.info("AWS SES Email Service Configuration:");
         logger.info("========================================");
-        logger.info("SMTP Host: {}", smtpHost);
-        logger.info("SMTP Port: {}", smtpPort);
+        
+        // Get configuration from the JavaMailSender bean
+        if (mailSender instanceof org.springframework.mail.javamail.JavaMailSenderImpl) {
+            org.springframework.mail.javamail.JavaMailSenderImpl impl = 
+                (org.springframework.mail.javamail.JavaMailSenderImpl) mailSender;
+            logger.info("SMTP Host: {}", impl.getHost());
+            logger.info("SMTP Port: {}", impl.getPort());
+        }
+        
         logger.info("AWS Region: {}", awsRegion);
         logger.info("Sender Email: {}", senderEmail);
         logger.info("Sender Name: {}", senderName);
-        logger.info("AWS Access Key ID: {}", maskAwsAccessKey(awsAccessKeyId));
-        logger.info("AWS Secret Access Key: {}", maskAwsSecretKey(awsSecretKey));
+        logger.info("AWS Authentication: Using IAM Role (DefaultAWSCredentialsProviderChain)");
         logger.info("========================================");
         
         // Additional validation logging
         if (senderEmail == null || senderEmail.isEmpty()) {
             logger.warn("WARNING: SES_SENDER_EMAIL environment variable is not set!");
         }
-        if (awsAccessKeyId == null || awsAccessKeyId.isEmpty()) {
-            logger.warn("WARNING: AWS_ACCESS_KEY_ID environment variable is not set!");
-        }
-        if (awsSecretKey == null || awsSecretKey.isEmpty()) {
-            logger.warn("WARNING: AWS_SECRET_ACCESS_KEY environment variable is not set!");
-        }
+        
+        logger.info("Note: Using EC2 instance IAM role for AWS authentication. Ensure the instance has SES send permissions.");
     }
     
-    /**
-     * Masks AWS Access Key ID for secure logging
-     * Shows first 4 characters followed by asterisks
-     * 
-     * @param accessKey The AWS Access Key ID to mask
-     * @return Masked access key string
-     */
-    private String maskAwsAccessKey(String accessKey) {
-        if (accessKey == null || accessKey.isEmpty()) {
-            return "[NOT SET]";
-        }
-        if (accessKey.length() <= 4) {
-            return "****";
-        }
-        return accessKey.substring(0, 4) + "****";
-    }
-    
-    /**
-     * Masks AWS Secret Access Key for secure logging
-     * Shows asterisks followed by last 4 characters
-     * 
-     * @param secretKey The AWS Secret Access Key to mask
-     * @return Masked secret key string
-     */
-    private String maskAwsSecretKey(String secretKey) {
-        if (secretKey == null || secretKey.isEmpty()) {
-            return "[NOT SET]";
-        }
-        if (secretKey.length() <= 4) {
-            return "****";
-        }
-        return "****" + secretKey.substring(secretKey.length() - 4);
-    }
 
     /**
      * Sends an email with policy information formatted as HTML
@@ -154,9 +111,15 @@ public class EmailService {
             logger.info("  - From: {} ({})", senderEmail, senderName);
             logger.info("  - To: {}", request.emailAddress());
             logger.info("  - Subject: {}", EMAIL_SUBJECT);
-            logger.info("  - SMTP Endpoint: {}:{}", smtpHost, smtpPort);
-            logger.info("  - AWS Credentials: Access Key={}, Secret Key={}", 
-                       maskAwsAccessKey(awsAccessKeyId), maskAwsSecretKey(awsSecretKey));
+            
+            // Get SMTP configuration from the JavaMailSender bean
+            if (mailSender instanceof org.springframework.mail.javamail.JavaMailSenderImpl) {
+                org.springframework.mail.javamail.JavaMailSenderImpl impl = 
+                    (org.springframework.mail.javamail.JavaMailSenderImpl) mailSender;
+                logger.info("  - SMTP Endpoint: {}:{}", impl.getHost(), impl.getPort());
+            }
+            
+            logger.info("  - AWS Authentication: Using IAM Role");
             
             // Create and configure MIME message
             MimeMessage message = mailSender.createMimeMessage();
