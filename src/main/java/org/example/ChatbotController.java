@@ -26,7 +26,7 @@ public class ChatbotController {
      */
     @GetMapping("/")
     public String rootChatbot() {
-        return "forward:/chatbot.html";
+        return "redirect:/chatbot.html";
     }
 
     /**
@@ -36,7 +36,7 @@ public class ChatbotController {
      */
     @GetMapping("/chatbot")
     public String chatbot() {
-        return "forward:/chatbot.html";
+        return "redirect:/chatbot.html";
     }
 
     /**
