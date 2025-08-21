@@ -124,4 +124,22 @@ public interface TechnicalConsultantAgent {
     @SystemMessage("You are a professional document analyst. When recapping documents, provide: 1) A brief executive summary (2-3 sentences), 2) Key points (bullet format), 3) Main topics covered, and 4) A conclusion. Be concise but comprehensive.")
     @UserMessage("Recap this document please: {{documentText}}")
     String recapDocument(@V("documentText") String documentText);
+
+    /**
+     * analyzeWithCustomPrompt method - Analyzes document content using a custom user prompt
+     * 
+     * This method allows users to ask specific questions about document content,
+     * making the agent flexible for various analysis tasks like VIN extraction,
+     * contact information retrieval, financial data analysis, etc.
+     * 
+     * @SystemMessage: Configures the AI as a document analyst that answers specific questions
+     * @UserMessage: Template that combines the user's custom prompt with document content
+     * 
+     * @param prompt The user's specific question or instruction for analysis
+     * @param documentText The extracted text from the document
+     * @return AI's response to the specific prompt about the document
+     */
+    @SystemMessage("You are a professional document analyst. Answer the user's specific question about the document content accurately and concisely.")
+    @UserMessage("{{prompt}}\n\nDocument content:\n{{documentText}}")
+    String analyzeWithCustomPrompt(@V("prompt") String prompt, @V("documentText") String documentText);
 }

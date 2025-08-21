@@ -64,8 +64,8 @@ public class PdfProcessorController {
      */
     @PostMapping(value = "/recap", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
-        summary = "Generate AI-powered PDF recap",
-        description = "Upload a PDF file to extract text content and generate a structured AI-powered recap with executive summary, key points, main topics, and conclusion."
+        summary = "Generate AI-powered PDF recap with optional custom prompt",
+        description = "Upload a PDF file to extract text content and generate an AI-powered analysis. By default, generates a structured recap with executive summary, key points, main topics, and conclusion. Optionally provide a custom prompt to ask specific questions about the document (e.g., extract VIN numbers, find contact information, analyze financial data)."
     )
     @ApiResponses(value = {
         @ApiResponse(
@@ -211,13 +211,26 @@ public class PdfProcessorController {
                 required = true,
                 content = @Content(mediaType = MediaType.MULTIPART_FORM_DATA_VALUE)
             )
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file,
+            
+            @Parameter(
+                description = "Optional custom prompt for specific document analysis. If not provided, generates a standard recap. Examples: 'Extract all VIN numbers', 'Find contact information', 'List all dates mentioned', 'Summarize financial data'",
+                required = false,
+                examples = {
+                    @ExampleObject(name = "VIN Extraction", value = "Find and extract all VIN numbers from this document"),
+                    @ExampleObject(name = "Contact Info", value = "Extract all phone numbers, email addresses, and physical addresses"),
+                    @ExampleObject(name = "Financial Analysis", value = "Identify and summarize all financial figures, transactions, and totals"),
+                    @ExampleObject(name = "Date Extraction", value = "List all dates and deadlines mentioned in the document")
+                }
+            )
+            @RequestParam(value = "prompt", required = false) String customPrompt) {
         
         long startTime = System.currentTimeMillis();
         String timestamp = Instant.now().toString();
         
-        logger.info("PDF recap request received - filename: {}, size: {} bytes", 
-                   file.getOriginalFilename(), file.getSize());
+        logger.info("PDF recap request received - filename: {}, size: {} bytes, mode: {}", 
+                   file.getOriginalFilename(), file.getSize(), 
+                   (customPrompt != null && !customPrompt.trim().isEmpty()) ? "custom prompt" : "standard recap");
 
         try {
             // Validate the uploaded file
@@ -226,8 +239,17 @@ public class PdfProcessorController {
             // Extract and process text from PDF using service
             PdfProcessorService.PdfProcessingResult processingResult = pdfProcessorService.extractTextFromPdf(file);
             
-            // Generate recap using Claude AI
-            String recap = technicalConsultantAgent.recapDocument(processingResult.getExtractedText());
+            // Generate recap or custom analysis using Claude AI
+            String recap;
+            if (customPrompt != null && !customPrompt.trim().isEmpty()) {
+                // Use custom prompt for specific analysis
+                logger.debug("Using custom prompt for analysis: {}", customPrompt);
+                recap = technicalConsultantAgent.analyzeWithCustomPrompt(customPrompt, processingResult.getExtractedText());
+            } else {
+                // Use default recap functionality
+                logger.debug("Using standard recap generation");
+                recap = technicalConsultantAgent.recapDocument(processingResult.getExtractedText());
+            }
             
             // Calculate total processing time (including service processing time)
             long totalProcessingTime = System.currentTimeMillis() - startTime;
@@ -243,7 +265,8 @@ public class PdfProcessorController {
                 totalProcessingTime
             );
             
-            logger.info("PDF recap completed successfully - filename: {}, processing time: {}ms", 
+            logger.info("PDF {} completed successfully - filename: {}, processing time: {}ms", 
+                       (customPrompt != null && !customPrompt.trim().isEmpty()) ? "custom analysis" : "recap",
                        file.getOriginalFilename(), totalProcessingTime);
             
             return ResponseEntity.ok(response);
