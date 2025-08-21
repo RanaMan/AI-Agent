@@ -140,12 +140,11 @@
 
         <div class="input-container">
             <input
-                    type="text"
+                    type="hidden"
                     class="message-input"
                     placeholder="Type your message here..."
                     id="messageInput"
             >
-            <button class="send-btn" onclick="sendMessage()">Send</button>
         </div>
     </div>
 </div>
@@ -184,6 +183,7 @@
 
         // Always include the version parameter
         url.searchParams.set('__version__', '2');
+        url.searchParams.set('enableFileAttachment', 'true');
 
         return url.toString();
     }
