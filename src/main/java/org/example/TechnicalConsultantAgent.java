@@ -142,4 +142,38 @@ public interface TechnicalConsultantAgent {
     @SystemMessage("You are a professional document analyst. Answer the user's specific question about the document content accurately and concisely.")
     @UserMessage("{{prompt}}\n\nDocument content:\n{{documentText}}")
     String analyzeWithCustomPrompt(@V("prompt") String prompt, @V("documentText") String documentText);
+
+    /**
+     * analyzeImage method - Analyzes image content with default comprehensive description
+     * 
+     * Provides detailed description of what's visible in the image including:
+     * - Objects, people, text, scenes
+     * - Colors, composition, style
+     * - Any readable text or numbers
+     * - Context and setting
+     * 
+     * Note: Claude can see attached images automatically through the vision API,
+     * so no parameters are needed for the image data itself.
+     * 
+     * @return Comprehensive description of the image content
+     */
+    @SystemMessage("You are a professional image analyst. Provide a comprehensive description of the image including objects, people, text, setting, and any relevant details you can observe. Be thorough but concise.")
+    @UserMessage("Analyze this image and describe what you see in detail.")
+    String analyzeImage();
+
+    /**
+     * analyzeImageWithPrompt method - Analyzes image content with custom user prompt
+     * 
+     * Allows specific questions about image content like:
+     * - "Find any VIN numbers visible in this image"
+     * - "What type of vehicle is shown?"
+     * - "Extract all text visible in the image"
+     * - "Is this a bill or invoice? What's the total amount?"
+     * 
+     * @param prompt The user's specific question or instruction for image analysis
+     * @return AI's response to the specific prompt about the image
+     */
+    @SystemMessage("You are a professional image analyst. Answer the user's specific question about the image content accurately and concisely.")
+    @UserMessage("{{prompt}}")
+    String analyzeImageWithPrompt(@V("prompt") String prompt);
 }
