@@ -10,8 +10,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.example.dto.ChatRequest;
 import org.example.dto.ChatResponse;
+import org.example.service.ClaudeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -52,6 +54,9 @@ import java.util.stream.Collectors;
 public class ChatController {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatController.class);
+    
+    @Autowired
+    private ClaudeService claudeService;
     
     // Configuration values from application.properties
     @Value("${chat.max.message.length:2000}")
@@ -225,18 +230,21 @@ public class ChatController {
                 logFileDetails(request.files());
             }
             
-            // Generate response based on message pattern (Step 1: hardcoded logic)
-            String responseText = generateHardcodedResponse(request);
+            // Generate response using Claude AI (Step 2B: with tool calling)
+            ClaudeService.ClaudeResult result = claudeService.processMessage(request);
+            String responseText = result.getResponse();
+            List<String> toolsUsed = result.getToolsUsed();
             
             // Calculate processing time
             long processingTime = System.currentTimeMillis() - startTime;
             
-            // Build success response
-            ChatResponse response = ChatResponse.successWithoutTools(
+            // Build success response with tools used
+            ChatResponse response = ChatResponse.success(
                 responseText,
                 sessionId,
                 timestamp,
-                processingTime
+                processingTime,
+                toolsUsed
             );
             
             logger.info("Chat message processed successfully - conversationId: {}, processing time: {}ms", 
@@ -269,6 +277,21 @@ public class ChatController {
                     )
                 );
             }
+            
+        } catch (ClaudeService.ClaudeServiceException e) {
+            logger.warn("Claude API call failed: {} - {}", e.getErrorCode(), e.getMessage());
+            
+            long processingTime = System.currentTimeMillis() - startTime;
+            
+            return ResponseEntity.ok(
+                ChatResponse.errorWithMetadata(
+                    sessionId,
+                    e.getErrorCode(),
+                    e.getMessage(),
+                    timestamp,
+                    processingTime
+                )
+            );
             
         } catch (Exception e) {
             logger.error("Unexpected error processing chat message: {}", e.getMessage(), e);
@@ -390,71 +413,6 @@ public class ChatController {
         }
     }
 
-    /**
-     * Generates hardcoded responses based on message patterns (Step 1 implementation)
-     * 
-     * @param request The chat request
-     * @return Generated response text
-     */
-    private String generateHardcodedResponse(ChatRequest request) {
-        String messageLower = request.message().toLowerCase().trim();
-        
-        // Check for greeting patterns
-        if (messageLower.equals("hello") || messageLower.equals("hi") || 
-            messageLower.startsWith("hello") || messageLower.startsWith("hi")) {
-            return "Hi! I'm your AI assistant. I can analyze PDFs, images, and send emails.";
-        }
-        
-        // Check for help request
-        if (messageLower.equals("help") || messageLower.contains("what can you do") || 
-            messageLower.contains("how can you help")) {
-            return "I can help with: 1) PDF analysis - extract text, find VIN numbers, summarize documents, " +
-                   "2) Image analysis - analyze images and extract information, " +
-                   "3) Sending policy emails - format and send emails with policy information";
-        }
-        
-        // Check for email-related keywords
-        if (messageLower.contains("email") || messageLower.contains("send") || 
-            messageLower.contains("policy")) {
-            return "I see you want to send an email. I'll be able to handle this once email integration is added.";
-        }
-        
-        // Handle file uploads
-        if (request.hasFiles()) {
-            List<String> fileDescriptions = new ArrayList<>();
-            
-            for (MultipartFile file : request.files()) {
-                String filename = file.getOriginalFilename();
-                String contentType = file.getContentType();
-                
-                if (contentType != null && contentType.startsWith("application/pdf")) {
-                    fileDescriptions.add(String.format("PDF file: %s", filename));
-                } else if (contentType != null && contentType.startsWith("image/")) {
-                    fileDescriptions.add(String.format("image: %s", filename));
-                }
-            }
-            
-            if (!fileDescriptions.isEmpty()) {
-                String fileList = String.join(", ", fileDescriptions);
-                
-                if (messageLower.contains("vin") || messageLower.contains("vehicle")) {
-                    return String.format("I see you uploaded %s and want to extract VIN information. " +
-                                       "I'll be able to analyze this once PDF processing is integrated.", fileList);
-                } else if (messageLower.contains("analyze") || messageLower.contains("extract")) {
-                    return String.format("I see you uploaded %s for analysis. " +
-                                       "I'll be able to process this once file analysis is integrated.", fileList);
-                } else {
-                    return String.format("I see you uploaded %s. " +
-                                       "I'll be able to analyze this once file processing is integrated.", fileList);
-                }
-            }
-        }
-        
-        // Default response for unmatched patterns
-        return String.format("I received your message: \"%s\". " +
-                           "I'll be able to process this intelligently once Claude integration is added.", 
-                           request.message());
-    }
 
     /**
      * Custom exception for validation errors with metadata support
