@@ -161,21 +161,19 @@ public class ClaudeService {
     }
     
     /**
-     * Initializes the chat agent with system message and tools
+     * Initializes the chat agent with system message
      */
     private void initializeChatAgent() {
         try {
             this.chatAgent = AiServices.builder(ChatAgent.class)
                 .chatModel(claudeModel)
-                .tools(chatTools)
                 .systemMessageProvider(memoryId -> systemMessage)
                 .build();
                 
-            logger.debug("Chat agent initialized with system message and tools: {}", 
-                        chatTools.getAvailableToolsSummary());
+            logger.debug("Chat agent initialized with system message (tools available in conversation agents)");
         } catch (Exception e) {
             throw new ClaudeServiceException("CLAUDE_AGENT_INITIALIZATION_FAILED", 
-                "Failed to create chat agent with tools: " + e.getMessage(), e);
+                "Failed to create chat agent: " + e.getMessage(), e);
         }
     }
     

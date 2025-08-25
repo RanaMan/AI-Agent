@@ -49,16 +49,7 @@ public class ChatTools {
         return mockResponse;
     }
     
-    /**
-     * Tool for analyzing PDF documents with just the file path (overload for simpler calls)
-     * 
-     * @param filePath Path to the PDF file
-     * @return Mock response indicating what analysis would be performed
-     */
-    @Tool("Analyzes PDF documents with general recap")
-    public String analyzePdf(String filePath) {
-        return analyzePdf(filePath, null);
-    }
+
 
     /**
      * Tool for analyzing images and extracting visual information
@@ -87,16 +78,6 @@ public class ChatTools {
         return mockResponse;
     }
     
-    /**
-     * Tool for analyzing images with just the file path (overload for simpler calls)
-     * 
-     * @param filePath Path to the image file
-     * @return Mock response indicating what analysis would be performed
-     */
-    @Tool("Analyzes images with general description")
-    public String analyzeImage(String filePath) {
-        return analyzeImage(filePath, null);
-    }
 
     /**
      * Tool for sending policy information emails to customers
