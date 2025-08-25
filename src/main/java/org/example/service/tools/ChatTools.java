@@ -1,10 +1,20 @@
 package org.example.service.tools;
 
 import dev.langchain4j.agent.tool.Tool;
+import org.example.dto.EmailRequest;
+import org.example.service.EmailService;
+import org.example.service.PdfProcessorService;
+import org.example.TechnicalConsultantAgent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;        // Add this import
+import java.util.ArrayList;
 /**
  * ChatTools - Tool definitions for Claude AI function calling
  * 
@@ -21,6 +31,26 @@ import org.springframework.stereotype.Component;
 public class ChatTools {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatTools.class);
+    
+    @Autowired
+    private PdfProcessorService pdfProcessorService;
+    
+    @Autowired
+    private EmailService emailService;
+    
+    @Autowired
+    private TechnicalConsultantAgent technicalConsultantAgent;
+    
+    // File cache for conversation-scoped file access
+    private Map<String, MultipartFile> fileCache = new ConcurrentHashMap<>();
+    
+    // Tool execution tracking for current conversation
+    private final ThreadLocal<List<String>> executedTools = new ThreadLocal<List<String>>() {
+        @Override
+        protected List<String> initialValue() {
+            return new ArrayList<>();
+        }
+    };
 
     /**
      * Tool for analyzing PDF documents and extracting information
@@ -34,19 +64,62 @@ public class ChatTools {
      */
     @Tool("Analyzes PDF documents and extracts information or answers specific questions about the content")
     public String analyzePdf(String filePath, String prompt) {
-        logger.info("Claude requested PDF analysis - file: {}, prompt: '{}'", filePath, prompt);
+        logger.info("Processing PDF analysis request - file: {}, prompt: '{}'", filePath, prompt);
         
-        String analysisType = (prompt != null && !prompt.trim().isEmpty()) ? prompt : "general document recap";
+        // Track tool execution
+        executedTools.get().add("analyze_pdf");
         
-        String mockResponse = String.format(
-            "[MOCK EXECUTION] Would analyze PDF file '%s' for: %s. " +
-            "This would extract text content, apply the analysis request, and return structured results. " +
-            "In Step 2C, this will call the actual PDF processor service.",
-            filePath, analysisType
-        );
-        
-        logger.info("Mock PDF analysis completed for file: {}", filePath);
-        return mockResponse;
+        try {
+            // Get the actual file from cache
+            MultipartFile pdfFile = getFileFromPath(filePath);
+            
+            // Extract text using existing PDF processor service
+            PdfProcessorService.PdfProcessingResult processingResult = 
+                pdfProcessorService.extractTextFromPdf(pdfFile);
+                
+            // Use TechnicalConsultantAgent for AI-powered analysis
+            String analysis;
+            if (prompt != null && !prompt.trim().isEmpty()) {
+                logger.debug("Using custom prompt for PDF analysis: {}", prompt);
+                analysis = technicalConsultantAgent.analyzeWithCustomPrompt(prompt, 
+                    processingResult.getExtractedText());
+            } else {
+                logger.debug("Using standard recap for PDF analysis");
+                analysis = technicalConsultantAgent.recapDocument(processingResult.getExtractedText());
+            }
+            
+            // Format the complete response with analysis and metadata
+            String response = String.format(
+                "PDF Analysis Results:\n%s\n\n" +
+                "Document Details:\n" +
+                "- File: %s\n" +
+                "- Pages: %d\n" +
+                "- Characters extracted: %d\n" +
+                "- Analysis completed successfully",
+                analysis,
+                pdfFile.getOriginalFilename(),
+                processingResult.getPageCount(),
+                processingResult.getFinalCharacterCount()
+            );
+            
+            logger.info("PDF analysis completed successfully - file: {}, pages: {}, chars: {}", 
+                       pdfFile.getOriginalFilename(), processingResult.getPageCount(), 
+                       processingResult.getFinalCharacterCount());
+            
+            return response;
+            
+        } catch (FileAccessException e) {
+            logger.error("File access failed for PDF analysis: {}", filePath, e);
+            return String.format("Sorry, I couldn't access the PDF file at '%s'. Please ensure the file was uploaded correctly.", filePath);
+            
+        } catch (PdfProcessorService.PdfProcessingException e) {
+            logger.error("PDF processing failed for file: {}", filePath, e);
+            return String.format("Sorry, I encountered an error processing the PDF: %s. The file might be corrupted, password-protected, or in an unsupported format.", e.getMessage());
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error during PDF analysis: {}", filePath, e);
+            return String.format("Sorry, I encountered an unexpected error analyzing the PDF: %s", e.getMessage());
+        }
     }
     
 
@@ -63,19 +136,53 @@ public class ChatTools {
      */
     @Tool("Analyzes images and extracts information or answers specific questions about visual content")
     public String analyzeImage(String filePath, String prompt) {
-        logger.info("Claude requested image analysis - file: {}, prompt: '{}'", filePath, prompt);
+        logger.info("Processing image analysis request - file: {}, prompt: '{}'", filePath, prompt);
         
-        String analysisType = (prompt != null && !prompt.trim().isEmpty()) ? prompt : "general image description";
+        // Track tool execution
+        executedTools.get().add("analyze_image");
         
-        String mockResponse = String.format(
-            "[MOCK EXECUTION] Would analyze image file '%s' for: %s. " +
-            "This would process the visual content, identify objects/text/details, and return structured results. " +
-            "In Step 2C, this will call the actual image analysis service.",
-            filePath, analysisType
-        );
-        
-        logger.info("Mock image analysis completed for file: {}", filePath);
-        return mockResponse;
+        try {
+            // Get the actual file from cache
+            MultipartFile imageFile = getFileFromPath(filePath);
+            
+            // Use TechnicalConsultantAgent for image analysis
+            // Note: Claude's vision capabilities can analyze images directly
+            String analysis;
+            if (prompt != null && !prompt.trim().isEmpty()) {
+                logger.debug("Using custom prompt for image analysis: {}", prompt);
+                analysis = technicalConsultantAgent.analyzeImageWithPrompt(prompt);
+            } else {
+                logger.debug("Using general image description");
+                analysis = technicalConsultantAgent.analyzeImage();
+            }
+            
+            // Format the complete response with analysis and metadata
+            String response = String.format(
+                "Image Analysis Results:\n%s\n\n" +
+                "Image Details:\n" +
+                "- File: %s\n" +
+                "- Size: %d bytes\n" +
+                "- Type: %s\n" +
+                "- Analysis completed successfully",
+                analysis,
+                imageFile.getOriginalFilename(),
+                imageFile.getSize(),
+                imageFile.getContentType()
+            );
+            
+            logger.info("Image analysis completed successfully - file: {}, size: {} bytes", 
+                       imageFile.getOriginalFilename(), imageFile.getSize());
+            
+            return response;
+            
+        } catch (FileAccessException e) {
+            logger.error("File access failed for image analysis: {}", filePath, e);
+            return String.format("Sorry, I couldn't access the image file at '%s'. Please ensure the file was uploaded correctly.", filePath);
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error during image analysis: {}", filePath, e);
+            return String.format("Sorry, I encountered an error analyzing the image: %s", e.getMessage());
+        }
     }
     
 
@@ -96,18 +203,96 @@ public class ChatTools {
     public String sendPolicyEmail(String emailAddress, String firstName, String lastName, 
                                   String policyNumber, String vin) {
         
-        logger.info("Claude requested policy email - recipient: {}, policy: {}, VIN: {}", 
+        logger.info("Processing policy email send request - recipient: {}, policy: {}, VIN: {}", 
                    emailAddress, policyNumber, vin);
         
-        String mockResponse = String.format(
-            "[MOCK EXECUTION] Would send policy information email to %s (%s %s). " +
-            "Email would contain policy number %s and VIN %s in a professionally formatted HTML template. " +
-            "In Step 2C, this will call the actual AWS SES email service.",
-            emailAddress, firstName, lastName, policyNumber, vin
-        );
+        // Track tool execution
+        executedTools.get().add("send_policy_email");
         
-        logger.info("Mock policy email prepared for: {}", emailAddress);
-        return mockResponse;
+        try {
+            // Create EmailRequest DTO using the existing record structure
+            EmailRequest emailRequest = new EmailRequest(emailAddress, firstName, lastName, policyNumber, vin);
+            
+            // Send email using existing AWS SES service
+            String messageId = emailService.sendPolicyEmail(emailRequest);
+            
+            // Format successful response with details
+            String response = String.format(
+                "Policy information email sent successfully!\n\n" +
+                "Email Details:\n" +
+                "- Recipient: %s (%s %s)\n" +
+                "- Policy Number: %s\n" +
+                "- VIN: %s\n" +
+                "- AWS SES Message ID: %s\n" +
+                "- Email delivery confirmed",
+                emailAddress, firstName, lastName, policyNumber, vin, messageId
+            );
+            
+            logger.info("Policy email sent successfully - recipient: {}, messageId: {}", emailAddress, messageId);
+            return response;
+            
+        } catch (EmailService.EmailSendException e) {
+            logger.error("Email sending failed - recipient: {}, error: {}", emailAddress, e.getMessage(), e);
+            
+            // Provide user-friendly error message based on error type
+            String userMessage = switch (e.getErrorCode()) {
+                case "INVALID_EMAIL" -> 
+                    String.format("Sorry, the email address '%s' appears to be invalid. Please check the email address and try again.", emailAddress);
+                case "SES_SEND_FAILED" -> 
+                    String.format("Sorry, I couldn't send the email to %s due to a delivery issue. This might be because the email address is not verified in our system.", emailAddress);
+                case "AUTHENTICATION_FAILED" -> 
+                    "Sorry, there was an authentication issue with our email service. Please try again later or contact support.";
+                default -> 
+                    String.format("Sorry, I encountered an error sending the email to %s: %s", emailAddress, e.getMessage());
+            };
+            
+            return userMessage;
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error sending policy email to: {}", emailAddress, e);
+            return String.format("Sorry, I encountered an unexpected error while sending the email to %s. Please try again later.", emailAddress);
+        }
+    }
+    
+    /**
+     * Sets the file cache for this conversation (called from ClaudeService)
+     * 
+     * @param fileCache Map of file paths to MultipartFile objects
+     */
+    public void setFileCache(Map<String, MultipartFile> fileCache) {
+        this.fileCache = fileCache;
+    }
+    
+    /**
+     * Gets the list of tools executed in the current thread/conversation
+     * 
+     * @return List of tool names that were executed
+     */
+    public List<String> getExecutedTools() {
+        return new ArrayList<>(executedTools.get());
+    }
+    
+    /**
+     * Clears the executed tools list for the current thread (called at start of new requests)
+     */
+    public void clearExecutedTools() {
+        executedTools.get().clear();
+    }
+    
+    /**
+     * Retrieves a file from the cache using the standardized file path
+     * 
+     * @param filePath The standardized file path (format: /uploaded/{conversationId}/{filename})
+     * @return MultipartFile object for the specified path
+     * @throws FileAccessException if file is not found in cache
+     */
+    private MultipartFile getFileFromPath(String filePath) throws FileAccessException {
+        MultipartFile file = fileCache.get(filePath);
+        if (file == null) {
+            throw new FileAccessException("File not found in cache: " + filePath);
+        }
+        logger.debug("Retrieved file from cache: {} (size: {} bytes)", filePath, file.getSize());
+        return file;
     }
     
     /**
@@ -118,5 +303,18 @@ public class ChatTools {
     public String getAvailableToolsSummary() {
         return "Available tools: analyzePdf (PDF document analysis), analyzeImage (image analysis), " +
                "sendPolicyEmail (policy information emails)";
+    }
+    
+    /**
+     * Custom exception for file access errors
+     */
+    public static class FileAccessException extends Exception {
+        public FileAccessException(String message) {
+            super(message);
+        }
+        
+        public FileAccessException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

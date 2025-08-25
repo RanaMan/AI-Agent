@@ -25,6 +25,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 /**
  * ClaudeService - Service layer for Claude AI chat interactions with conversation memory
@@ -134,6 +135,10 @@ public class ClaudeService {
             validateApiConfiguration();
             initializeChatAgent();
             startMemoryCleanupScheduler();
+            
+            // Run API investigation
+            org.example.LangChain4jApiInvestigation.investigateAvailableApis();
+            
             logger.info("ClaudeService initialized successfully with memory window size: {}", memoryWindowSize);
         } catch (Exception e) {
             logger.error("Failed to initialize ClaudeService: {}", e.getMessage(), e);
@@ -209,7 +214,12 @@ public class ClaudeService {
             // Get or create conversation memory
             MessageWindowChatMemory memory = getOrCreateMemory(conversationId);
             
-            // Build the message with file acknowledgment if needed
+            // Cache uploaded files for tool access and clear previous tool executions
+            Map<String, MultipartFile> conversationFiles = cacheUploadedFiles(request);
+            chatTools.setFileCache(conversationFiles);
+            chatTools.clearExecutedTools();
+            
+            // Build the message with file information for tool calling
             String enhancedMessage = buildEnhancedMessage(request);
             
             // Create agent with memory and tools for this conversation
@@ -223,8 +233,9 @@ public class ClaudeService {
             // Send message to Claude
             String response = conversationAgent.chat(enhancedMessage);
             
-            // Analyze response to detect tool usage
-            List<String> toolsUsed = detectToolUsage(response);
+            // Get tools that were actually executed directly from ChatTools
+            List<String> toolsUsed = chatTools.getExecutedTools();
+            logger.debug("Tools executed during this request: {}", toolsUsed);
             
             long processingTime = System.currentTimeMillis() - startTime;
             
@@ -260,6 +271,31 @@ public class ClaudeService {
     }
     
     /**
+     * Caches uploaded files using standardized file paths for tool access
+     * 
+     * @param request The chat request containing uploaded files
+     * @return Map of standardized file paths to MultipartFile objects
+     */
+    private Map<String, MultipartFile> cacheUploadedFiles(ChatRequest request) {
+        Map<String, MultipartFile> fileCache = new ConcurrentHashMap<>();
+        
+        if (request.hasFiles()) {
+            for (MultipartFile file : request.files()) {
+                // Create standardized path: /uploaded/{conversationId}/{filename}
+                String standardizedPath = String.format("/uploaded/%s/%s", 
+                    request.conversationId(), file.getOriginalFilename());
+                
+                fileCache.put(standardizedPath, file);
+                
+                logger.debug("Cached file for tools: {} -> {} (size: {} bytes)", 
+                           standardizedPath, file.getOriginalFilename(), file.getSize());
+            }
+        }
+        
+        return fileCache;
+    }
+    
+    /**
      * Builds enhanced message with file information for tool calling
      */
     private String buildEnhancedMessage(ChatRequest request) {
@@ -268,13 +304,13 @@ public class ClaudeService {
         if (request.hasFiles()) {
             messageBuilder.append("\n\n[UPLOADED FILES AVAILABLE FOR ANALYSIS:");
             
-            for (int i = 0; i < request.files().size(); i++) {
-                MultipartFile file = request.files().get(i);
+            for (MultipartFile file : request.files()) {
                 String filename = file.getOriginalFilename();
                 String contentType = file.getContentType();
                 
-                // Create file path that tools can reference
-                String filePath = "/uploaded/" + filename;
+                // Create standardized file path that tools can reference
+                String filePath = String.format("/uploaded/%s/%s", 
+                    request.conversationId(), filename);
                 
                 messageBuilder.append("\n- File: ").append(filename)
                              .append(" (").append(contentType).append(")")
@@ -290,7 +326,7 @@ public class ClaudeService {
     }
     
     /**
-     * Detects tool usage from Claude's response by analyzing mock execution markers
+     * Detects tool usage from Claude's response by analyzing actual execution markers
      * 
      * @param response Claude's response text
      * @return List of tool names that were called
@@ -302,29 +338,29 @@ public class ClaudeService {
             return toolsUsed;
         }
         
-        // Check for mock execution markers that indicate tool usage
+        // Check for actual execution markers that indicate tool usage
         String lowerResponse = response.toLowerCase();
         
-        // Check for PDF analysis tool
-        if (lowerResponse.contains("[mock execution] would analyze pdf") || 
-            lowerResponse.contains("analyzepdf") ||
-            lowerResponse.contains("pdf analysis")) {
+        // Check for PDF analysis tool (look for actual results, not mock)
+        if (lowerResponse.contains("pdf analysis results:") || 
+            lowerResponse.contains("document details:") ||
+            (lowerResponse.contains("pdf") && 
+             (lowerResponse.contains("pages:") || lowerResponse.contains("characters extracted:")))) {
             toolsUsed.add("analyze_pdf");
             logger.debug("Detected PDF analysis tool usage in response");
         }
         
-        // Check for image analysis tool
-        if (lowerResponse.contains("[mock execution] would analyze image") ||
-            lowerResponse.contains("analyzeimage") ||
-            lowerResponse.contains("image analysis")) {
+        // Check for image analysis tool (look for actual results)
+        if (lowerResponse.contains("image analysis results:") ||
+            (lowerResponse.contains("image") && lowerResponse.contains("analysis completed successfully"))) {
             toolsUsed.add("analyze_image");
             logger.debug("Detected image analysis tool usage in response");
         }
         
-        // Check for email sending tool
-        if (lowerResponse.contains("[mock execution] would send policy") ||
-            lowerResponse.contains("sendpolicyemail") ||
-            lowerResponse.contains("policy email")) {
+        // Check for email sending tool (look for actual delivery confirmation)
+        if (lowerResponse.contains("policy information email sent successfully") ||
+            lowerResponse.contains("aws ses message id:") ||
+            lowerResponse.contains("email delivery confirmed")) {
             toolsUsed.add("send_policy_email");
             logger.debug("Detected policy email tool usage in response");
         }
@@ -363,6 +399,27 @@ public class ClaudeService {
         }
         
         String lowerMessage = message.toLowerCase();
+        
+        // Tool execution specific errors
+        if (lowerMessage.contains("pdf") && (lowerMessage.contains("processing") || lowerMessage.contains("extraction"))) {
+            return new ClaudeServiceException("PDF_PROCESSING_ERROR", 
+                "PDF analysis failed: " + message, e);
+        }
+        
+        if (lowerMessage.contains("image") && lowerMessage.contains("analysis")) {
+            return new ClaudeServiceException("IMAGE_PROCESSING_ERROR", 
+                "Image analysis failed: " + message, e);
+        }
+        
+        if (lowerMessage.contains("email") && lowerMessage.contains("send")) {
+            return new ClaudeServiceException("EMAIL_SENDING_ERROR", 
+                "Email delivery failed: " + message, e);
+        }
+        
+        if (lowerMessage.contains("file") && (lowerMessage.contains("access") || lowerMessage.contains("not found"))) {
+            return new ClaudeServiceException("FILE_ACCESS_ERROR", 
+                "File access failed: " + message, e);
+        }
         
         // Function calling specific errors
         if (lowerMessage.contains("function") || lowerMessage.contains("tool")) {
