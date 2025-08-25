@@ -1,6 +1,10 @@
 package org.example.service.tools;
 
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.data.message.ImageContent;
+import dev.langchain4j.data.message.TextContent;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import org.example.dto.EmailRequest;
 import org.example.service.EmailService;
 import org.example.service.PdfProcessorService;
@@ -11,10 +15,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;        // Add this import
 import java.util.ArrayList;
+
 /**
  * ChatTools - Tool definitions for Claude AI function calling
  * 
@@ -40,6 +47,9 @@ public class ChatTools {
     
     @Autowired
     private TechnicalConsultantAgent technicalConsultantAgent;
+    
+    @Autowired
+    private AnthropicChatModel claudeModel;
     
     // File cache for conversation-scoped file access
     private Map<String, MultipartFile> fileCache = new ConcurrentHashMap<>();
@@ -145,19 +155,23 @@ public class ChatTools {
             // Get the actual file from cache
             MultipartFile imageFile = getFileFromPath(filePath);
             
-            // Use TechnicalConsultantAgent for image analysis
-            // Note: Claude's vision capabilities can analyze images directly
-            String analysis;
-            if (prompt != null && !prompt.trim().isEmpty()) {
-                logger.debug("Using custom prompt for image analysis: {}", prompt);
-                analysis = technicalConsultantAgent.analyzeImageWithPrompt(prompt);
-            } else {
-                logger.debug("Using general image description");
-                analysis = technicalConsultantAgent.analyzeImage();
-            }
+            // Get image bytes and MIME type
+            byte[] imageBytes = imageFile.getBytes();
+            String mimeType = imageFile.getContentType();
+            
+            // Create UserMessage with both text and image content
+            UserMessage visionMessage = UserMessage.from(
+                TextContent.from(prompt != null && !prompt.trim().isEmpty() 
+                    ? prompt 
+                    : "Please describe what you see in this image in detail."),
+                ImageContent.from(Base64.getEncoder().encodeToString(imageBytes), mimeType)
+            );
+            
+            // Call Claude directly with the vision message
+            String analysis = claudeModel.chat(visionMessage).aiMessage().text();
             
             // Format the complete response with analysis and metadata
-            String response = String.format(
+            String analysisResponse = String.format(
                 "Image Analysis Results:\n%s\n\n" +
                 "Image Details:\n" +
                 "- File: %s\n" +
@@ -173,11 +187,15 @@ public class ChatTools {
             logger.info("Image analysis completed successfully - file: {}, size: {} bytes", 
                        imageFile.getOriginalFilename(), imageFile.getSize());
             
-            return response;
+            return analysisResponse;
             
         } catch (FileAccessException e) {
             logger.error("File access failed for image analysis: {}", filePath, e);
             return String.format("Sorry, I couldn't access the image file at '%s'. Please ensure the file was uploaded correctly.", filePath);
+            
+        } catch (IOException e) {
+            logger.error("Failed to read image bytes for analysis: {}", filePath, e);
+            return String.format("Sorry, I couldn't read the image file data: %s", e.getMessage());
             
         } catch (Exception e) {
             logger.error("Unexpected error during image analysis: {}", filePath, e);
