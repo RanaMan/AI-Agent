@@ -96,11 +96,18 @@ public class ChatController {
      */
     @PostMapping(value = "/message", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
-        summary = "Process chat message with optional file uploads",
-        description = "Send a text message with optional file attachments to the chat BFF. " +
-                     "The system will process the message and files, returning an appropriate response. " +
-                     "In Step 1, responses are hardcoded for testing. Future steps will integrate Claude AI " +
-                     "for intelligent processing and tool execution."
+        summary = "🚀 AGENTIC INTERFACE - Process natural language requests with AI tool execution",
+        description = "✨ THE RECOMMENDED WAY to interact with the AI Agent system. Send natural language messages with optional file uploads. " +
+                     "Claude AI will understand your request and automatically execute the appropriate tools.\n\n" +
+                     "🔄 REPLACES DEPRECATED ENDPOINTS:\n" +
+                     "• Instead of /api/pdf/recap → 'Analyze this PDF for VIN numbers'\n" +
+                     "• Instead of /api/email/send → 'Send policy email to john@example.com with policy POL-123'\n\n" +
+                     "✅ BENEFITS:\n" +
+                     "• Natural language interaction - no need to learn API schemas\n" +
+                     "• Intelligent tool selection based on your request\n" +
+                     "• Conversation memory across messages\n" +
+                     "• File context maintained throughout conversation\n" +
+                     "• Better error handling with natural explanations"
     )
     @ApiResponses(value = {
         @ApiResponse(
@@ -180,13 +187,15 @@ public class ChatController {
     })
     public ResponseEntity<ChatResponse> processMessage(
             @Parameter(
-                description = "User's text message (required, max 2000 characters)",
+                description = "User's natural language message (required, max 2000 characters)",
                 required = true,
                 examples = {
-                    @ExampleObject(name = "Greeting", value = "hello"),
-                    @ExampleObject(name = "Help Request", value = "help"),
-                    @ExampleObject(name = "PDF Analysis", value = "Can you analyze this PDF for VIN numbers?"),
-                    @ExampleObject(name = "Email Request", value = "Send an email with the policy information")
+                    @ExampleObject(name = "PDF Analysis (replaces /api/pdf/recap)", value = "Analyze this PDF document and extract all VIN numbers"),
+                    @ExampleObject(name = "Policy Email (replaces /api/email/send)", value = "Send policy email to john@example.com with policy POL-123, customer John Doe, and VIN 1HGBH41JXMN109186"),
+                    @ExampleObject(name = "Image Analysis", value = "What do you see in this image? Look for any damage or VIN plates"),
+                    @ExampleObject(name = "Document Summary", value = "Summarize the key points from this PDF"),
+                    @ExampleObject(name = "Multi-step Request", value = "Analyze this PDF for policy details and then email the summary to customer@example.com"),
+                    @ExampleObject(name = "Greeting", value = "Hello, what can you help me with?")
                 }
             )
             @RequestParam("message") String message,

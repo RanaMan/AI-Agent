@@ -14,7 +14,9 @@
       "WebFetch(domain:docs.langchain4j.dev)",
       "WebFetch(domain:github.com)",
       "Bash(find:*)",
-      "Bash(mvn compile:*)"
+      "Bash(mvn compile:*)",
+      "Bash(java:*)",
+      "Bash(apt list:*)"
     ],
     "deny": []
   }

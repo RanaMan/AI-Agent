@@ -8,8 +8,7 @@ import java.util.ArrayList;
  * 
  * This record provides a standardized response structure for the chat BFF endpoint,
  * ensuring type safety and consistent API responses. It supports both success and error
- * scenarios through conditional field usage, following the established patterns from
- * PdfRecapResponse and EmailResponse.
+ * scenarios through conditional field usage.
  * 
  * Success Response:
  * - All fields populated except 'error' (which is null)
